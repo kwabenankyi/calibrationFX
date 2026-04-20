@@ -114,6 +114,9 @@ pyaml==25.7.0
 pycparser==3.0
 Pygments==2.20.0
 pyparsing==3.3.2
+PyQt5==5.15.11
+PyQt5-Qt5==5.15.18
+PyQt5_sip==12.18.0
 pyre-extensions==0.0.32
 pyro-api==0.1.2
 pyro-ppl==1.9.1
