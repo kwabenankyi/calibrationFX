@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -5,6 +7,7 @@ import sys
 import time
 import warnings
 import traceback
+import argparse
 import cma
 import multiprocess as mp
 
@@ -50,7 +53,30 @@ os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
 warnings.filterwarnings("ignore")
 np.seterr(all='ignore')
 
-date = sys.argv[1] if len(sys.argv) > 1 else "01-12-2023"
+def parse_cli_args():
+    parser = argparse.ArgumentParser(description="Quadratic Rough Heston FX calibration")
+    parser.add_argument(
+        "date",
+        nargs="?",
+        default="01-12-2023",
+        help="Data date folder in DD-MM-YYYY format (default: 01-12-2023)",
+    )
+    parser.add_argument(
+        "--ui-update-every",
+        type=int,
+        default=8,
+        dest="ui_update_every",
+        help="Process UI events every N simulation timesteps (smaller is smoother, default: 8)",
+    )
+    args = parser.parse_args()
+    if args.ui_update_every <= 0:
+        parser.error("--ui-update-every must be a positive integer")
+    return args
+
+
+cli_args = parse_cli_args()
+date = cli_args.date
+ui_update_every = cli_args.ui_update_every
 
 FIGSIZE = (15,7.5)
 FOUR_THREE = (16,12)
@@ -110,18 +136,29 @@ if __name__ == "__main__":
     xi_smooth = xi_curve_smooth(fx_expiries_arr, w_in, eps=0.03)["xi_curve"]
 
     u = np.linspace(0, max(fx_expiries_arr), 1000)
-    fig, ax = plt.subplots()
+    fig1, ax = plt.subplots()
     ax.plot(u, xi_smooth(u), color="red", linewidth=2)
     ax.set_xlabel("Maturity u")
     ax.set_ylabel(r"$\xi(u)$")
     ax.set_title(f"Smoothed xi curve from market variance swap data ({date})")
     pw = plotWindow()
+    ui_last_update = [0.0]
 
-    pw.addPlot(f"Fig. {fig_count}", fig)
-    fig_count += 1
+    def pump_ui(force=False):
+        now = time.perf_counter()
+        if not force and now - ui_last_update[0] < 0.1:
+            return
+        if pw.MainWindow.isVisible():
+            pw.update()
+        ui_last_update[0] = now
 
-    plt.show()
-    plt.pause(1)
+    def add_plot_window_figure(figure, title=None):
+        global fig_count
+        pw.addPlot(title or f"Fig. {fig_count}", figure)
+        fig_count += 1
+        pump_ui(force=True)
+
+    add_plot_window_figure(fig1)
 
     COMBINED_OIS_DICT = {expiry: rate for (expiry, rate) in zip(fx_expiries_arr, COMBINED_OIS)}
 
@@ -166,6 +203,7 @@ if __name__ == "__main__":
     # Forward variance curve fitting objective function for initial guess parameters
 
     def xi_objective_with_grid(params):
+        pump_ui()
         start_time = time.perf_counter()
         c, nu, lam, al, a, b = params[0], params[1], params[2], params[3], params[4], params[5]
 
@@ -181,6 +219,10 @@ if __name__ == "__main__":
         obj_calls.append(time.perf_counter() - start_time)
         return diff
 
+    def de_progress_callback(_xk, _convergence):
+        pump_ui(force=True)
+        return False
+
     print("------------------------------------------------------------------------------")
     print("Starting Forward Variance Curve Fitting...")
     diff_ev_wall_time_start = time.perf_counter()
@@ -194,7 +236,8 @@ if __name__ == "__main__":
         popsize=72,
         atol=1e-8,
         disp=True,
-        polish=False
+        polish=False,
+        callback=de_progress_callback,
     )
     diff_ev_time = time.perf_counter() - diff_ev_wall_time_start
     print(f"Optimisation completed in {diff_ev_time} seconds")
@@ -237,7 +280,7 @@ if __name__ == "__main__":
     print(f"RMSE between fitted xi curve and smoothed xi curve: {np.sqrt(np.mean((fit_curve - xi_curve_over_tau_days) ** 2)):.6e}")
     print(f"Percentage difference between fitted xi curve and smoothed xi curve: {100*np.mean(np.abs((fit_curve - xi_curve_over_tau_days) / xi_curve_over_tau_days)):.6f}%")
 
-    plt.figure(figsize=(8,8))
+    fig = plt.figure(figsize=(8,8))
     title = "Forward variance curve, {} ({} to {})".format(date, TAU_STR[0], TAU_STR[-1])
     u = np.linspace(0, max(fx_var_swap["expiries"]), 1000)
     plt.plot(u, xi_smooth(u), color="red", linewidth=3, label="Market")
@@ -252,8 +295,7 @@ if __name__ == "__main__":
 
     plt.savefig(f'{ig_path}xi_curve.eps', format='eps')
     plt.savefig(f'{ig_path}xi_curve.png', dpi=600, format='png')
-    plt.show()
-    plt.pause(1)
+    add_plot_window_figure(fig)
 
     # Run simulation with initial guess parameters
 
@@ -262,7 +304,15 @@ if __name__ == "__main__":
     qrh_ig = QuadraticRoughHeston(**params_ig, xi0=xi_smooth)
 
     start_time = time.perf_counter()
-    res = qrh_ig.simulate_filtered(mc_path_Variance, mc_path_X, fx_expiries_arr, markovian_lift=False, interest_rates=COMBINED_OIS_DICT)
+    res = qrh_ig.simulate_filtered(
+        mc_path_Variance,
+        mc_path_X,
+        fx_expiries_arr,
+        markovian_lift=False,
+        interest_rates=COMBINED_OIS_DICT,
+        ui_callback=pump_ui,
+        ui_update_every=ui_update_every,
+    )
     end_time = time.perf_counter() - start_time
 
     print("Number of paths", PATHS)
@@ -316,8 +366,7 @@ if __name__ == "__main__":
 
     plt.savefig(f'{ig_path}model_fits/price_ig.eps', format='eps')
     plt.savefig(f'{ig_path}model_fits/price_ig.png', dpi=600, format='png')
-    plt.show()
-    plt.pause(0.2)
+    add_plot_window_figure(fig)
 
     # PLOTTING THE 3D VOLATILITY SURFACE (Market vs Model initial guess - Jaeckel)
     fig = plt.figure(figsize=FOUR_THREE)
@@ -339,9 +388,7 @@ if __name__ == "__main__":
 
     plt.savefig(f'{ig_path}model_fits/vol_ig_jaeckel.eps', format='eps')
     plt.savefig(f'{ig_path}model_fits/vol_ig_jaeckel.png', dpi=600, format='png')
-
-    plt.show()
-    plt.pause(0.2)
+    add_plot_window_figure(fig)
 
     # PLOTTING THE 3D VOLATILITY SURFACE (Market vs Model initial guess - Gatheral)
     fig = plt.figure(figsize=FOUR_THREE)
@@ -363,9 +410,7 @@ if __name__ == "__main__":
 
     plt.savefig(f'{ig_path}model_fits/vol_ig_gatheral.eps', format='eps')
     plt.savefig(f'{ig_path}model_fits/vol_ig_gatheral.png', dpi=600, format='png')
-
-    plt.show()
-    plt.pause(0.2)
+    add_plot_window_figure(fig)
 
     print("Jaeckel Median/ Mean Diff:", np.median(np.abs(VOL_QUOTES - initial_guess_iv_grid_jaeckel)), np.mean(np.abs(VOL_QUOTES - initial_guess_iv_grid_jaeckel)))
     print("Gatheral Median/ Mean Diff:", np.median(np.abs(VOL_QUOTES - initial_guess_iv_grid_gatheral)), np.mean(np.abs(VOL_QUOTES - initial_guess_iv_grid_gatheral)))
@@ -391,6 +436,7 @@ if __name__ == "__main__":
     total_time = time.perf_counter()
 
     for theta in random_params:
+        pump_ui()
         count += 1
         if count % np.round(N / 20) == 0:
             print(f"------------------------------------------- RUN {count}/{N} -------------------------------------------")
@@ -406,7 +452,15 @@ if __name__ == "__main__":
             qrh = QuadraticRoughHeston(**param_dict, xi0=xi_smooth)
 
             sim_time = time.perf_counter()
-            paths = qrh.simulate_filtered(mc_path_Variance, mc_path_X, fx_expiries_arr, interest_rates=COMBINED_OIS_DICT, markovian_lift=True)
+            paths = qrh.simulate_filtered(
+                mc_path_Variance,
+                mc_path_X,
+                fx_expiries_arr,
+                interest_rates=COMBINED_OIS_DICT,
+                markovian_lift=True,
+                ui_callback=pump_ui,
+                ui_update_every=ui_update_every,
+            )
             simulation_time.append(time.perf_counter() - sim_time)
             path_matrix = np.array([paths[expiry]["X"] for expiry in fx_expiries_arr])
             output_prices = get_mc_prices_grid_log_fwd(
@@ -550,10 +604,9 @@ if __name__ == "__main__":
     cbar2.ax.tick_params(labelsize=13)
 
     plt.tight_layout()
-    plt.show()
-    plt.pause(0.2)
     plt.savefig(f'{ig_path}sobol_search_{len(valid_points)}_{N}.png', dpi=600, format='png')
     plt.savefig(f'{ig_path}sobol_search_{len(valid_points)}_{N}.eps', format='eps')
+    add_plot_window_figure(fig)
 
     # Global optimisation: Warm started IPOP-CMA-ES
     converge_constraint = lambda x: (x[1] / gamma(x[3])) ** 2 * gamma(2 * (x[3] - 0.5)) / (2 * x[2]) ** (2 * (x[3] - 0.5))
@@ -569,7 +622,15 @@ if __name__ == "__main__":
 
         qrh = QuadraticRoughHeston(**param_dict, xi0=xi_smooth)
 
-        paths = qrh.simulate_filtered(mc_path_Variance, mc_path_X, fx_expiries_arr, interest_rates=COMBINED_OIS_DICT, markovian_lift=True)
+        paths = qrh.simulate_filtered(
+            mc_path_Variance,
+            mc_path_X,
+            fx_expiries_arr,
+            interest_rates=COMBINED_OIS_DICT,
+            markovian_lift=True,
+            ui_callback=pump_ui,
+            ui_update_every=ui_update_every,
+        )
         path_matrix = np.array([paths[expiry]["X"] for expiry in fx_expiries_arr])
         
         output_prices = get_mc_prices_grid_log_fwd(
@@ -595,7 +656,15 @@ if __name__ == "__main__":
 
         qrh = QuadraticRoughHeston(**param_dict, xi0=xi_smooth)
 
-        paths = qrh.simulate_filtered(mc_path_Variance, mc_path_X, fx_expiries_arr, interest_rates=COMBINED_OIS_DICT, markovian_lift=True)
+        paths = qrh.simulate_filtered(
+            mc_path_Variance,
+            mc_path_X,
+            fx_expiries_arr,
+            interest_rates=COMBINED_OIS_DICT,
+            markovian_lift=True,
+            ui_callback=pump_ui,
+            ui_update_every=ui_update_every,
+        )
         path_matrix = np.array([paths[expiry]["X"] for expiry in fx_expiries_arr])
         
         output_prices = get_mc_prices_grid_log_fwd(
@@ -615,7 +684,15 @@ if __name__ == "__main__":
         c, nu, lam, al, a, b = params
         param_dict = {"c": c, "nu": nu, "lam": lam, "al": al, "a": a, "b": b}
         qrh = QuadraticRoughHeston(**param_dict, xi0=xi_smooth)
-        paths = qrh.simulate_filtered(mc_path_Variance, mc_path_X, fx_expiries_arr, interest_rates=COMBINED_OIS_DICT, markovian_lift=True)
+        paths = qrh.simulate_filtered(
+            mc_path_Variance,
+            mc_path_X,
+            fx_expiries_arr,
+            interest_rates=COMBINED_OIS_DICT,
+            markovian_lift=True,
+            ui_callback=pump_ui,
+            ui_update_every=ui_update_every,
+        )
         path_matrix = np.array([paths[expiry]["X"] for expiry in fx_expiries_arr])
 
         output_prices = get_mc_prices_grid_log_fwd(
@@ -869,12 +946,15 @@ if __name__ == "__main__":
                                 tick = time.perf_counter()
                                 raw_solutions = es.ask()
                                 clipped_solutions = [np.clip(sol, lower_bounds_arr, upper_bounds_arr) for sol in raw_solutions]
-                                fitnesses = list(tqdm(
-                                    pool.imap(obj, clipped_solutions), 
-                                    total=len(clipped_solutions), 
+                                fitnesses = []
+                                for fit in tqdm(
+                                    pool.imap(obj, clipped_solutions),
+                                    total=len(clipped_solutions),
                                     desc=f"Gen {es.result.iterations} | Best Loss: {es.result.fbest:.8e}",
-                                    leave=False
-                                ))
+                                    leave=False,
+                                ):
+                                    fitnesses.append(fit)
+                                    pump_ui()
                                 es.tell(
                                     raw_solutions,
                                     fitnesses,
@@ -882,6 +962,7 @@ if __name__ == "__main__":
                                 )
                                 es.logger.add()
                                 es.disp()
+                                pump_ui(force=True)
                                 tock = time.perf_counter()
                                 t_per_gen.append(tock - tick)
 
@@ -951,8 +1032,7 @@ if __name__ == "__main__":
         fig.set_size_inches(18, 10)
         cma.s.figsave(f'{opt_path}run_{i}_plot.png', dpi=600, format='png')
         cma.s.figsave(f'{opt_path}run_{i}_plot.eps', format='eps')
-        plt.show()
-        plt.pause(0.2)
+        add_plot_window_figure(fig)
 
     # Local optimization: Nelder-Mead
     opt_method = "Nelder-Mead"
@@ -961,11 +1041,15 @@ if __name__ == "__main__":
     print("\n------------------------------------------------------------------------------\n")
     print(f"Starting final {opt_method} optimization with vega price objective...")
 
+    def final_opt_callback(xk):
+        pump_ui(force=True)
+        return final_opt_sim.callback(xk)
+
     total_optimization_time = time.perf_counter()
     final_opt = minimize(
         method=opt_method,
         fun=final_opt_sim.simulate,
-        callback=final_opt_sim.callback,
+        callback=final_opt_callback,
         x0=run_res["params"],
         bounds=Bounds(lb=lower_bounds, ub=upper_bounds, keep_feasible=True),
         constraints=cons,
@@ -1082,7 +1166,14 @@ if __name__ == "__main__":
     qrh_params = {"al": al_qrh, "lam": lam_qrh, "nu": nu_qrh, "c": c_qrh, "a": a_qrh , "b": b_qrh }
 
     optimized_qrh = QuadraticRoughHeston(**qrh_params, xi0=xi_smooth)
-    res_optimized = optimized_qrh.simulate_filtered(mc_path_X, mc_path_Variance, fx_var_swap["expiries"], interest_rates=COMBINED_OIS_DICT)
+    res_optimized = optimized_qrh.simulate_filtered(
+        mc_path_X,
+        mc_path_Variance,
+        fx_var_swap["expiries"],
+        interest_rates=COMBINED_OIS_DICT,
+        ui_callback=pump_ui,
+        ui_update_every=ui_update_every,
+    )
 
     mc_path_matrix_new = np.array([res_optimized[expiry]["X"] for expiry in fx_expiries])
     mc_var_matrix_new = np.array([res_optimized[expiry]["V"] for expiry in fx_expiries])
@@ -1125,10 +1216,9 @@ if __name__ == "__main__":
     ax.set_yticklabels(TAU_TICKS)
     ax.legend(loc = "upper right")
 
-    plt.show()
-    plt.pause(0.2)
     plt.savefig(f'{opt_path}model_fits/price_opt.eps', format='eps', bbox_inches='tight', pad_inches=1)
     plt.savefig(f'{opt_path}model_fits/price_opt.png', dpi=600, format='png')
+    add_plot_window_figure(fig)
 
     # PLOTTING THE 3D IMP VOL SURFACE (Market vs Model) - JAECKEL
     fig = plt.figure(figsize=FOUR_THREE)
@@ -1147,10 +1237,9 @@ if __name__ == "__main__":
     ax.set_yticklabels(TAU_TICKS)
     ax.legend(loc = "upper right")
 
-    plt.show()
-    plt.pause(0.2)
     plt.savefig(f'{opt_path}model_fits/vol_opt_jaeckel.eps', format='eps', bbox_inches='tight', pad_inches=1)
     plt.savefig(f'{opt_path}model_fits/vol_opt_jaeckel.png', dpi=600, format='png')
+    add_plot_window_figure(fig)
 
     # PLOTTING THE 3D IMP VOL SURFACE (Market vs Model) - GATHERAL
     fig = plt.figure(figsize=FOUR_THREE)
@@ -1169,10 +1258,9 @@ if __name__ == "__main__":
     ax.set_yticklabels(TAU_TICKS)
     ax.legend(loc = "upper right")
 
-    plt.show()
-    plt.pause(0.2)
     plt.savefig(f'{opt_path}model_fits/vol_opt_gatheral.eps', format='eps', bbox_inches='tight', pad_inches=1)
     plt.savefig(f'{opt_path}model_fits/vol_opt_gatheral.png', dpi=600, format='png')
+    add_plot_window_figure(fig)
 
     plt.rcParams.update({'font.size': 9})
     plt.rcParams.update({'axes.labelpad': 9})
@@ -1195,10 +1283,9 @@ if __name__ == "__main__":
 
     fig.legend(["Market", "Model [Jaeckel]"], loc="lower right")
     fig.tight_layout()
-    plt.show()
-    plt.pause(0.2)
     plt.savefig(f'{opt_path}model_smiles/jaeckel_strike_smile_{TAU_STR[0]}_{TAU_STR[-1]}.eps', format='eps')
     plt.savefig(f'{opt_path}model_smiles/jaeckel_strike_smile_{TAU_STR[0]}_{TAU_STR[-1]}.png', dpi=600, format='png')
+    add_plot_window_figure(fig)
 
     # Gatheral smiles
     fig, axes = plt.subplots(nrows=ROWS, ncols=COLS, figsize=FIGSIZE)
@@ -1216,9 +1303,11 @@ if __name__ == "__main__":
 
     fig.legend(["Market", "Model [Gatheral]"], loc="lower right")
     fig.tight_layout()
-    plt.show()
-    plt.pause(0.2)
     plt.savefig(f'{opt_path}model_smiles/gatheral_strike_smile_{TAU_STR[0]}_{TAU_STR[-1]}.eps', format='eps')
     plt.savefig(f'{opt_path}model_smiles/gatheral_strike_smile_{TAU_STR[0]}_{TAU_STR[-1]}.png', dpi=600, format='png')
-    # FInal instruction to keep figs open
-    plt.show(block=False)
+    add_plot_window_figure(fig)
+
+    # Keep the plotting UI responsive until closed by the user.
+    while pw.MainWindow.isVisible():
+        pw.update()
+        time.sleep(0.05)

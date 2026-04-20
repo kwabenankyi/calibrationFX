@@ -5,7 +5,7 @@ from numfracpy import Mittag_Leffler_two
 from scipy import integrate
 from scipy.special import gamma, gammainc, roots_jacobi
 from scipy.optimize import nnls
-from typing import Callable
+from typing import Callable, Optional
 
 """
 Quadratic Rough Heston model. Updated by Anthony Nkyi.
@@ -402,7 +402,9 @@ class QuadraticRoughHeston:
         delvix=1.0 / 12.0,
         nvix=10,
         interest_rates: dict = None,
-        markovian_lift: bool = False
+        markovian_lift: bool = False,
+        ui_callback: Optional[Callable[[], None]] = None,
+        ui_update_every: int = 25,
     ):
         """
         QRH simulation which processes all expiries on one path, rather than separate computation.
@@ -423,6 +425,8 @@ class QuadraticRoughHeston:
             raise ValueError("'nvix' must be positive.")
         if not isinstance(expiries, (list, np.ndarray)):
             raise ValueError("'expiries' must be a list or numpy array.")
+        if ui_update_every <= 0:
+            raise ValueError("'ui_update_every' must be positive.")
         
         # Sort expiries and create time grid
         expiries = np.array(sorted(expiries))
@@ -566,6 +570,9 @@ class QuadraticRoughHeston:
                     
                     results[expiry] = res_sim
                     exp_completed += 1
+
+            if ui_callback is not None and ((j + 1) % ui_update_every == 0 or j == num_steps - 1):
+                ui_callback()
         
         return results
     
@@ -578,12 +585,25 @@ class QuadraticRoughHeston:
         delvix=1.0 / 12.0,
         nvix=10,
         interest_rates: dict = None,
-        markovian_lift: bool = False
+        markovian_lift: bool = False,
+        ui_callback: Optional[Callable[[], None]] = None,
+        ui_update_every: int = 25,
     ):
         """
         Wrapper for simulate_filtered which generates random paths on demand.
         """
         mc_path_X = np.random.normal(size=(num_paths, num_steps))
         mc_path_V = np.random.normal(size=(num_paths, num_steps))
-        return self.simulate_filtered(mc_path_V, mc_path_X, expiries, output, delvix, nvix, interest_rates, markovian_lift)
+        return self.simulate_filtered(
+            mc_path_V,
+            mc_path_X,
+            expiries,
+            output,
+            delvix,
+            nvix,
+            interest_rates,
+            markovian_lift,
+            ui_callback,
+            ui_update_every,
+        )
         
