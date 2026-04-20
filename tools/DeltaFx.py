@@ -3,6 +3,7 @@ from scipy.stats import norm
 
 """
 Converting FX spot delta IV quotes to strike equivalents under the Black-Scholes pricing model.
+Converted from the MATLAB code of Lorenzo Lombardi, Guido Germano (2025). 
 
 Anthony Nkyi, March 2026.
 """
