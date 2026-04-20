@@ -23,6 +23,7 @@ from optimiser import *
 from tqdm import tqdm
 from datetime import datetime
 from scipy.optimize import differential_evolution, minimize, NonlinearConstraint, Bounds
+from plotWindow.plotWindow import plotWindow
 
 """
 A full calibration of the Quadratic Rough Heston model to EURUSD FX options market data, 
@@ -114,7 +115,9 @@ if __name__ == "__main__":
     ax.set_xlabel("Maturity u")
     ax.set_ylabel(r"$\xi(u)$")
     ax.set_title(f"Smoothed xi curve from market variance swap data ({date})")
+    pw = plotWindow()
 
+    pw.addPlot(f"Fig. {fig_count}", fig)
     fig_count += 1
 
     plt.show()
