@@ -1,6 +1,6 @@
 # date = "01-12-2023"
 import numpy as np
-import spreadsheet as ts
+import tools.spreadsheet as ts
 
 date_str = "01-12-2023"
 
@@ -9,9 +9,9 @@ TAU_DAYS = np.array([1, 7, 14, 21, 30, 60, 90, 120, 150, 180, 270, 365, 365+180,
 
 days_to_tau = {days: tau for tau, days in zip(TAU, TAU_DAYS)}
 
-spot = float(ts.get_fx_spot("..data/EURUSD_SpotExchangeRate_2023.xlsx", date_str))
+spot = float(ts.get_fx_spot("data/EURUSD_SpotExchangeRate_2023.xlsx", date_str))
 
-all_quotes = ts.get_vol_quotes("..data/Dec_01.xlsx")
+all_quotes = ts.get_vol_quotes("data/Dec_01.xlsx")
 vol_quotes = all_quotes["mid"]
 bid_quotes = all_quotes["bid"]
 ask_quotes = all_quotes["ask"]
@@ -46,8 +46,8 @@ tau_days_to_ticks = {
 tau_ticks_to_days = {v: k for k, v in tau_days_to_ticks.items()}
 
 #                    1D,     1W,     2W,     3W,     1M,     2M,     3M,     4M,     5M,     6M,     9M,     1Y,   18M,     2Y,    3Y,    4Y,      5Y,      7Y,    10Y,   15Y,     20Y,    25Y,    30Y
-USD_OIS = ts.get_usd_interest_rates("..data/US_OIS_2023.xlsx", date_str)
-EUR_OIS = ts.get_euro_interest_rates("..data/EUR_OIS_ESTR_2023.xlsx", date_str)
+USD_OIS = ts.get_usd_interest_rates("data/US_OIS_2023.xlsx", date_str)
+EUR_OIS = ts.get_euro_interest_rates("data/EUR_OIS_ESTR_2023.xlsx", date_str)
 
 def getVolQuotes(tau_ticks):
     vols = []
