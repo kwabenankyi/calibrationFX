@@ -191,4 +191,4 @@ def optionVega_log_fwd(S_0: float, k_grid: np.ndarray, tau: float, r: float, q: 
     """
     Vega calculation using log forward moneyness.
     """
-    return S_0 * norm.pdf(d1Value_log_fwd(S_0, k_grid, sigma, tau, r-q)) * np.sqrt(tau)
+    return S_0 * norm.pdf(d1Value_log_fwd(k_grid, sigma, tau)) * np.sqrt(tau)
