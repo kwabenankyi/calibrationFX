@@ -1079,7 +1079,7 @@ if __name__ == "__main__":
     loss1 = vega_price_obj(best_theta)
     loss2 = vol_price_obj(best_theta)
     loss3 = price_obj(best_theta)
-    print(f"Initial curve RMSE Loss: \nVega={loss1:.9e}, Vol={loss2:.9e}, Price={loss3:.9e}")
+    print(f"Random search RMSE Loss: \nVega={loss1:.9e}, Vol={loss2:.9e}, Price={loss3:.9e}")
     print(f"Params: {best_theta}")
     print(f"Resolvent kernel: {converge_test_val(best_theta[1], best_theta[2], best_theta[3])}\n")
 
@@ -1107,6 +1107,7 @@ if __name__ == "__main__":
     kernel_val = converge_test_val(params[1], params[2], params[3])
     print(f"Final CMA-ES RMSE Loss: \nVega={loss1:.9e}, Vol={loss2:.9e}, Price={loss3:.9e} | Kernel={kernel_val:.9e} | Params: {params}\n")
 
+    # final optimised vars
     loss1 = vega_price_obj(final_opt.x)
     loss2 = vol_price_obj(final_opt.x)
     loss3 = price_obj(final_opt.x)
@@ -1117,7 +1118,7 @@ if __name__ == "__main__":
 
     print("\n------------------------------------------------------------------------------\n")
 
-    qrh_final_params = run_res["params"] #[c, result_sol.x[0], result_sol.x[1], result_sol.x[2]]
+    qrh_final_params = run_res["params"]
 
     c_qrh = float(qrh_final_params[0])
     nu_qrh = float(qrh_final_params[1])
@@ -1198,11 +1199,9 @@ if __name__ == "__main__":
 
     # Plot results
 
-    plt.rcParams.update({'font.size': 16})
-    plt.rcParams.update({'axes.labelpad': 20})
-
     # PLOTTING THE 3D PRICE SURFACE (Market vs Model)
     fig = plt.figure(figsize=FOUR_THREE)
+    fig.set_dpi(100)
     ax = fig.add_subplot(111, projection='3d')
 
     X, Y = np.meshgrid(-delta_put, TAU)
@@ -1226,6 +1225,7 @@ if __name__ == "__main__":
 
     # PLOTTING THE 3D IMP VOL SURFACE (Market vs Model) - JAECKEL
     fig = plt.figure(figsize=FOUR_THREE)
+    fig.set_dpi(100)
     ax = fig.add_subplot(111, projection='3d')
 
     ax.plot_wireframe(X, Y, VOL_QUOTES, color='red', label='Market', linewidth=2)
@@ -1247,6 +1247,7 @@ if __name__ == "__main__":
 
     # PLOTTING THE 3D IMP VOL SURFACE (Market vs Model) - GATHERAL
     fig = plt.figure(figsize=FOUR_THREE)
+    fig.set_dpi(100)
     ax = fig.add_subplot(111, projection='3d')
 
     ax.plot_wireframe(X, Y, VOL_QUOTES, color='red', label='Market', linewidth=2)
@@ -1271,6 +1272,7 @@ if __name__ == "__main__":
 
     # Jaeckel smiles
     fig, axes = plt.subplots(nrows=ROWS, ncols=COLS, figsize=FIGSIZE)
+    fig.set_dpi(100)
     axes = axes.flatten()
 
     Z = VOL_QUOTES
@@ -1293,6 +1295,7 @@ if __name__ == "__main__":
 
     # Gatheral smiles
     fig, axes = plt.subplots(nrows=ROWS, ncols=COLS, figsize=FIGSIZE)
+    fig.set_dpi(100)
     axes = axes.flatten()
 
     for i in range (len(TAU)):

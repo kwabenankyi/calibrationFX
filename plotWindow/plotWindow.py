@@ -41,7 +41,7 @@ class plotWindow():
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self.closeTab)
         self.MainWindow.setCentralWidget(self.tabs)
-        self.MainWindow.resize(1280, 900)
+        self.MainWindow.resize(1200, 900)
         self.MainWindow.show()
 
     def closeTab(self, index):
