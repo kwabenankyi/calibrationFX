@@ -1027,12 +1027,16 @@ if __name__ == "__main__":
         if es.result.iterations < 2:
             print(f"Skipping plot for run {i + 1} due to insufficient iterations.")
             continue
-        es.plot()
-        fig = plt.gcf()
-        fig.set_size_inches(18, 10)
-        cma.s.figsave(f'{opt_path}run_{i}_plot.png', dpi=600, format='png')
-        cma.s.figsave(f'{opt_path}run_{i}_plot.eps', format='eps')
-        add_plot_window_figure(fig)
+        fig = plt.figure(figsize=(18, 10), dpi=100)
+        es.plot(fig=fig.number, fontsize=7)
+        fig = plt.figure(fig.number)
+        fig.set_size_inches(18, 10, forward=True)
+        fig.set_dpi(100)
+        png_path = f'{opt_path}run_{i}_plot.png'
+        eps_path = f'{opt_path}run_{i}_plot.eps'
+        fig.savefig(png_path, dpi=600, format='png')
+        fig.savefig(eps_path, format='eps')
+        add_plot_window_figure(fig, title=f"CMA Run {i}")
 
     # Local optimization: Nelder-Mead
     opt_method = "Nelder-Mead"
@@ -1175,17 +1179,17 @@ if __name__ == "__main__":
         ui_update_every=ui_update_every,
     )
 
-    mc_path_matrix_new = np.array([res_optimized[expiry]["X"] for expiry in fx_expiries])
-    mc_var_matrix_new = np.array([res_optimized[expiry]["V"] for expiry in fx_expiries])
+    mc_path_matrix_new = np.array([res_optimized[expiry]["X"] for expiry in fx_expiries_arr])
+    mc_var_matrix_new = np.array([res_optimized[expiry]["V"] for expiry in fx_expiries_arr])
 
     optimised_model_price_grid = get_mc_prices_grid_log_fwd(
-        mc_path_matrix_new, spot, log_fwd_moneyness_grid, fx_expiries_arr, base_rates_arr, term_rates_arr, cp_flags_arr, FWD
+        mc_path_matrix_new, spot, log_fwd_moneyness_grid, fx_expiries_arr, base_rates_arr, term_rates_arr, cp_flags_grid, FWD
     )
     optimised_iv_grid_jaeckel = get_iv_from_prices_grid_jaeckel(
-        optimised_model_price_grid, spot, strike_grid, fx_expiries_arr, base_rates_arr, term_rates_arr, cp_flags_arr,
+        optimised_model_price_grid, spot, strike_grid, fx_expiries_arr, base_rates_arr, term_rates_arr, cp_flags_grid,
     )
     optimised_iv_grid_gatheral = get_iv_from_paths_grid_gatheral(
-        mc_path_matrix_new, spot, log_fwd_moneyness_grid, fx_expiries_arr, base_rates_arr, term_rates_arr, cp_flags_arr
+        mc_path_matrix_new, spot, log_fwd_moneyness_grid, fx_expiries_arr, base_rates_arr, term_rates_arr, cp_flags_grid
     )
 
     np.savetxt(f"{data_expiries_path}optimized_model_price_grid.csv", optimised_model_price_grid, delimiter=",")
