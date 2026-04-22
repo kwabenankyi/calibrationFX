@@ -473,7 +473,7 @@ if __name__ == "__main__":
     simulation_time = []
     valid_point_runtime = []
     total_time = time.perf_counter()
-    """
+
     print("\n------------------------------------------------------------------------------")
     for theta in random_params:
         pump_ui()
@@ -647,7 +647,7 @@ if __name__ == "__main__":
     plt.savefig(f'{ig_path}sobol_search_{len(valid_points)}_{N}.png', dpi=600, format='png')
     plt.savefig(f'{ig_path}sobol_search_{len(valid_points)}_{N}.eps', format='eps')
     add_plot_window_figure(fig)
-"""
+
     # Global optimisation: Warm started IPOP-CMA-ES
     converge_constraint = lambda x: (x[1] / gamma(x[3])) ** 2 * gamma(2 * (x[3] - 0.5)) / (2 * x[2]) ** (2 * (x[3] - 0.5))
     nlc = NonlinearConstraint(converge_constraint, 0, 0.9999999)
@@ -802,12 +802,12 @@ if __name__ == "__main__":
         'CMA_active': True, # pushes the strategy away from bad regions
     }
 
-    """x0 = best_theta
+    x0 = best_theta
     x1 = initial_guess_params
     x2 = valid_points[1][0]
     num_choose = 9
 
-    ipop_x0 = np.array([vp[0] for vp in valid_points[:num_choose]] + [x1])"""
+    ipop_x0 = np.array([vp[0] for vp in valid_points[:num_choose]] + [x1])
 
     # check at least 7 points are linearly independent for the optimisation to work
     rank = np.linalg.matrix_rank(ipop_x0 - np.mean(ipop_x0, axis=0), tol=1e-5)
@@ -896,14 +896,14 @@ if __name__ == "__main__":
         mc_path_X=mc_path_X,
         mc_path_Variance=mc_path_Variance,
         worker_init_args_tail=worker_init_args_tail,
-        #prior_X=ipop_x0,
-        #prior_loss=ipop_loss,
+        prior_X=ipop_x0,
+        prior_loss=ipop_loss,
         max_restarts=2,
         incpop_factor=2,
         gamma=1,
         alpha=0.25,
-        fallback_x0=ipop_x0,
-        fallback_sigma0=0.25,
+        fallback_x0=np.atleast_2d(initial_guess_params),
+        fallback_sigma0=0.5,
         logger_path_fn=lambda guess_idx, run: f"outcmaes/{TAU_STR[0]}-to-{TAU_STR[-1]}/guess{guess_idx}_run{run}/",
     )
 
