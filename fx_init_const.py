@@ -12,11 +12,11 @@ DELTA = np.array([-0.05, -0.1, -0.15, -0.25, -0.35, -0.5, 0.35, 0.25, 0.15, 0.1,
 
 spot = fx_data.spot
 
-t = fx_data.getTau(TAU_STR)
+t = fx_data.get_tau(TAU_STR)
 TAU = t["tau"].ravel()
 TAU_DAYS = t["tau_days"].ravel()
 
-ois = fx_data.getOISRates(TAU_STR)
+ois = fx_data.get_ois_rates(TAU_STR)
 USD_OIS = ois["USD_OIS"].ravel()
 EUR_OIS = ois["EUR_OIS"].ravel()
 
@@ -26,7 +26,7 @@ EUR_OIS = np.log(1 + EUR_OIS * TAU) / TAU
 
 COMBINED_OIS = (USD_OIS - EUR_OIS)
 
-VOL_QUOTES = fx_data.getVolQuotes(TAU_STR)
+VOL_QUOTES = fx_data.get_volatility_quotes(TAU_STR)
 
 FWD = spot * np.exp(COMBINED_OIS * TAU)
 

@@ -18,13 +18,13 @@ def value_check(S_0, K, tau, sigma):
         return ValueError("Sigma is strictly positive.")
     return True
 
-def d1Value(S_0: float, K: np.ndarray, sigma: float, tau: float, r: float, q: float = 0.0):
+def d1_value(S_0: float, K: np.ndarray, sigma: float, tau: float, r: float, q: float = 0.0):
     return (np.log(S_0 / K) + (r - q + 0.5*sigma**2)*tau) / (sigma * np.sqrt(tau))
 
-def d1Value_log_fwd(K: np.ndarray, sigma: float, tau: float):
+def d1_value_log_fwd(K: np.ndarray, sigma: float, tau: float):
     return (- K + 0.5*sigma**2*tau) / (sigma * np.sqrt(tau))
 
-def priceOption(CP, S_0: float, K, tau: float, r: float, vol):
+def price_option(CP, S_0: float, K, tau: float, r: float, vol):
     """
     Pricing European call/put options using the Black-Scholes equation with no dividends.
     Vectorised: CP, K, and vol can be arrays.
@@ -50,7 +50,7 @@ def priceOption(CP, S_0: float, K, tau: float, r: float, vol):
 
     assert value_check(S_0, K, tau, vol)
 
-    d1 = d1Value(S_0, K, vol, tau, r)
+    d1 = d1_value(S_0, K, vol, tau, r)
     d2 = d1 - vol * np.sqrt(tau)
 
     disc = np.exp(-r * tau)
@@ -62,7 +62,7 @@ def priceOption(CP, S_0: float, K, tau: float, r: float, vol):
 
     return price if price.size > 1 else float(price)
 
-def priceFxOption(CP, S_0: float, K, tau: float, r_base: float, r_term: float, vol):
+def price_fx_option(CP, S_0: float, K, tau: float, r_base: float, r_term: float, vol):
     """
     Pricing a European call/put FX option using the Black-Scholes equation. 
     
@@ -90,7 +90,7 @@ def priceFxOption(CP, S_0: float, K, tau: float, r_base: float, r_term: float, v
 
     assert value_check(S_0, K, tau, vol)
 
-    d1 = d1Value(S_0, K, vol, tau, r_term - r_base)
+    d1 = d1_value(S_0, K, vol, tau, r_term - r_base)
     d2 = d1 - vol * np.sqrt(tau)
 
     price = CP * (
@@ -99,7 +99,7 @@ def priceFxOption(CP, S_0: float, K, tau: float, r_base: float, r_term: float, v
     )
     return price
 
-def priceOptionMonteCarlo(CP: np.ndarray, S_0: float, X_paths: np.ndarray, K, tau: float, r: float):
+def price_option_mc(CP: np.ndarray, S_0: float, X_paths: np.ndarray, K, tau: float, r: float):
     """
     Pricing a European call/put option using Monte Carlo simulation.
     
@@ -137,7 +137,7 @@ def priceOptionMonteCarlo(CP: np.ndarray, S_0: float, X_paths: np.ndarray, K, ta
     # Return scalar if single strike, otherwise array
     return option_prices if option_prices.size > 1 else option_prices.item()
 
-def priceOptionMonteCarlo_log_fwd(CP: np.ndarray, S_0: float, X_paths: np.ndarray, k_log_fwd, F: float, tau: float, r: float):
+def price_option_mc_log_fwd(CP: np.ndarray, S_0: float, X_paths: np.ndarray, k_log_fwd, F: float, tau: float, r: float):
     """
     Pricing a European call/put option using Monte Carlo simulation
     with log forward moneyness.
@@ -181,14 +181,14 @@ def priceOptionMonteCarlo_log_fwd(CP: np.ndarray, S_0: float, X_paths: np.ndarra
     # Return scalar if single strike, otherwise array
     return option_prices if option_prices.size > 1 else option_prices.item()
 
-def optionVega(S_0: float, K: np.ndarray, tau: float, r: float, q: float, sigma: float):
+def option_vega(S_0: float, K: np.ndarray, tau: float, r: float, q: float, sigma: float):
     """
     Calculating vega: rate of change of option price to volatility change (DV/Dsigma) for a European call/put option using the Black-Scholes equation. K should be in vector form: shape (n,1)
     """
-    return S_0 * norm.pdf(d1Value(S_0, K, sigma, tau, r-q)) * np.sqrt(tau)
+    return S_0 * norm.pdf(d1_value(S_0, K, sigma, tau, r-q)) * np.sqrt(tau)
 
-def optionVega_log_fwd(S_0: float, k_grid: np.ndarray, tau: float, r: float, q: float, sigma: float):
+def option_vega_log_fwd(S_0: float, k_grid: np.ndarray, tau: float, r: float, q: float, sigma: float):
     """
     Vega calculation using log forward moneyness.
     """
-    return S_0 * norm.pdf(d1Value_log_fwd(k_grid, sigma, tau)) * np.sqrt(tau)
+    return S_0 * norm.pdf(d1_value_log_fwd(k_grid, sigma, tau)) * np.sqrt(tau)

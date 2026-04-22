@@ -1,5 +1,5 @@
 import numpy as np
-from tools.BlackScholes import priceOptionMonteCarlo_log_fwd, priceOptionMonteCarlo, priceFxOption, optionVega, optionVega_log_fwd
+from tools.BlackScholes import price_option_mc_log_fwd, price_option_mc, price_fx_option, option_vega, option_vega_log_fwd
 from tools.DeltaFx import delta_to_strike
 from py_vollib.black_scholes_merton.implied_volatility import implied_volatility
 from tools.gatheral_black import black_otm_impvol_mc, black_impvol_brentq
@@ -8,7 +8,7 @@ import pandas as pd
 """
 Grid construction and related functions for financial option pricing and implied volatility calculations.
 Setup function generates a grid of strikes and prices from given volatility quotes and market data and 
-initializes the necessary data structures for further analysis.
+initialises the necessary data structures for further analysis.
 
 Anthony Nkyi, March 2026.
 """
@@ -21,8 +21,8 @@ def get_mc_prices_grid(mc_paths_matrix, spot, K_grid, T_arr, r_b_arr, r_t_arr, c
     prices_list = [] 
 
     for i in range(n_expiries):
-        p = priceOptionMonteCarlo(cp_flags[i], spot, mc_paths_matrix[i], K_grid[i], T_arr[i], r_t_arr[i])
-        p_atm = priceOptionMonteCarlo(np.array([1]), spot, mc_paths_matrix[i], K_grid[i][1], T_arr[i], r_t_arr[i])
+        p = price_option_mc(cp_flags[i], spot, mc_paths_matrix[i], K_grid[i], T_arr[i], r_t_arr[i])
+        p_atm = price_option_mc(np.array([1]), spot, mc_paths_matrix[i], K_grid[i][1], T_arr[i], r_t_arr[i])
         # atm calc
         p[5] = (p[5] + p_atm) / 2
         prices_list.append(p)
@@ -37,8 +37,8 @@ def get_mc_prices_grid_log_fwd(mc_paths_matrix, spot, log_fwd_moneyness_grid, T_
     central_idx = log_fwd_moneyness_grid.shape[1] // 2
 
     for i in range(n_expiries):
-        p = priceOptionMonteCarlo_log_fwd(cp_flags[i], spot, mc_paths_matrix[i], log_fwd_moneyness_grid[i], fwd_list[i], T_arr[i], r_t_arr[i])
-        p_atm = priceOptionMonteCarlo_log_fwd(-1 * np.array([cp_flags[i, central_idx]]), spot, mc_paths_matrix[i], log_fwd_moneyness_grid[i, central_idx], fwd_list[i], T_arr[i], r_t_arr[i])
+        p = price_option_mc_log_fwd(cp_flags[i], spot, mc_paths_matrix[i], log_fwd_moneyness_grid[i], fwd_list[i], T_arr[i], r_t_arr[i])
+        p_atm = price_option_mc_log_fwd(-1 * np.array([cp_flags[i, central_idx]]), spot, mc_paths_matrix[i], log_fwd_moneyness_grid[i, central_idx], fwd_list[i], T_arr[i], r_t_arr[i])
         p[central_idx] = (p[central_idx] + p_atm) / 2
         prices_list.append(p)
     
@@ -50,7 +50,7 @@ def build_vega_grid(spot, K_grid, T_arr, r_b_arr, r_t_arr, vol_grid):
     vega_mat = np.zeros((n_expiries, n_strikes))
 
     for i in range(n_expiries):
-        vega_mat[i, :] = optionVega(spot, K_grid[i, :], T_arr[i], r_t_arr[i], r_b_arr[i], vol_grid[i, :])
+        vega_mat[i, :] = option_vega(spot, K_grid[i, :], T_arr[i], r_t_arr[i], r_b_arr[i], vol_grid[i, :])
     
     return vega_mat
 
@@ -59,7 +59,7 @@ def build_vega_grid_log_fwd(spot, k_grid, T_arr, r_b_arr, r_t_arr, vol_grid):
     vega_mat = np.zeros((n_expiries, n_strikes))
 
     for i in range(n_expiries):
-        vega_mat[i, :] = optionVega_log_fwd(spot, k_grid[i, :], T_arr[i], r_t_arr[i], r_b_arr[i], vol_grid[i, :])
+        vega_mat[i, :] = option_vega_log_fwd(spot, k_grid[i, :], T_arr[i], r_t_arr[i], r_b_arr[i], vol_grid[i, :])
     
     return vega_mat
 
@@ -132,7 +132,7 @@ def setup(volatility_grid, expiries, domestic_rate, foreign_rate, forward_prices
         inverse_vol_list = []
         inverse_vol_list_gatheral = []
 
-        price_list = priceFxOption(call_put_calc, spot, strike_list, current_tau, current_base, current_term, vol_quotes_calc)
+        price_list = price_fx_option(call_put_calc, spot, strike_list, current_tau, current_base, current_term, vol_quotes_calc)
         for z in range (len(price_list)):
             inverse_vol_list.append(implied_volatility(price_list[z], spot, strike_list[z], 
                                                        current_tau, current_term, current_base, call_put_calc_str[z]))

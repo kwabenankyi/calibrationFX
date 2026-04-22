@@ -2,7 +2,7 @@ import enum
 import numpy as np
 from scipy.stats import norm
     
-def brownianPaths(num_paths, num_steps):
+def brownian_paths(num_paths, num_steps):
     return np.random.normal(size=(num_paths, num_steps))
 
 class OptionType(enum.IntEnum):

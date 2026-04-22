@@ -49,31 +49,31 @@ tau_ticks_to_days = {v: k for k, v in tau_days_to_ticks.items()}
 USD_OIS = ts.get_usd_interest_rates("data/US_OIS_2023.xlsx", date_str)
 EUR_OIS = ts.get_euro_interest_rates("data/EUR_OIS_ESTR_2023.xlsx", date_str)
 
-def getVolQuotes(tau_ticks):
+def get_volatility_quotes(tau_ticks):
     vols = []
     for tick in tau_ticks:
         vols.append(vol_quotes[tick])
     return np.array(vols, dtype=np.float64)
 
-def getBidQuotes(tau_ticks):
+def get_bid_quotes(tau_ticks):
     bids = []
     for tick in tau_ticks:
         bids.append(bid_quotes[tick])
     return np.array(bids, dtype=np.float64)
 
-def getAskQuotes(tau_ticks):
+def get_ask_quotes(tau_ticks):
     asks = []
     for tick in tau_ticks:
         asks.append(ask_quotes[tick])
     return np.array(asks, dtype=np.float64)
 
-def getSpreads(tau_ticks):
+def get_volatility_spreads(tau_ticks):
     spreads = []
     for tick in tau_ticks:
         spreads.append(spread_quotes[tick])
     return np.array(spreads, dtype=np.float64)
 
-def getOISRates(tau_ticks):
+def get_ois_rates(tau_ticks):
     usd_rates = []
     eur_rates = []
     for tick in tau_ticks:
@@ -82,7 +82,7 @@ def getOISRates(tau_ticks):
         eur_rates.append(EUR_OIS[:,idx])
     return {"USD_OIS": np.array(usd_rates, dtype=np.float64), "EUR_OIS": np.array(eur_rates, dtype=np.float64)}
 
-def getTau(tau_ticks):
+def get_tau(tau_ticks):
     taus = []
     tau_days = []
     for tick in tau_ticks:

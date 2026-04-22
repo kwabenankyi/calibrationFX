@@ -408,8 +408,7 @@ class QuadraticRoughHeston:
     ):
         """
         QRH simulation which processes all expiries on one path, rather than separate computation.
-        Respects the non-Markovian nature of memory function (Y), while maintaining the Markovian 
-        structure for the lifted variables. Includes interest rate (drift) adjustments.
+        Includes interest rate (drift) adjustments.
 
         Must have enough steps to protect against error.
 
@@ -434,8 +433,7 @@ class QuadraticRoughHeston:
         if interest_rates is not None:
             interest_rates_array = np.array([interest_rates[exp] for exp in expiries])
         
-        # Independent paths
-        # For variance, log-asset paths
+        # Independent paths for variance, log-price paths
         Z_eps = mc_path_V
         Z_chi = mc_path_X
         
@@ -606,4 +604,3 @@ class QuadraticRoughHeston:
             ui_callback,
             ui_update_every,
         )
-        

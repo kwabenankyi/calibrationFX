@@ -6,16 +6,14 @@ import os
 import sys
 import time
 import warnings
-import traceback
 import argparse
-import cma
+import atexit
 import multiprocess as mp
 
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from multiprocess import shared_memory
 from scipy.stats import qmc
-from tools.Asset import brownianPaths
+from tools.Asset import brownian_paths
 from tools.grid import *
 from tools.qrh_converge_test import *
 from tools.qrh_params import *
@@ -23,7 +21,6 @@ from fwd_var_curve import xi_curve_smooth, var_swap_robust, solve_for_xi
 from fx_init_const import *
 from QuadraticRoughHeston import *
 from optimiser import *
-from tqdm import tqdm
 from datetime import datetime
 from scipy.optimize import differential_evolution, minimize, NonlinearConstraint, Bounds
 from plotWindow.plotWindow import plotWindow
@@ -52,6 +49,46 @@ os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
 
 warnings.filterwarnings("ignore")
 np.seterr(all='ignore')
+
+
+class TeeStream:
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for stream in self.streams:
+            stream.write(data)
+        return len(data)
+
+    def flush(self):
+        for stream in self.streams:
+            stream.flush()
+
+NUM_CORES = 8
+
+def init_run_logging(run_date):
+    os.makedirs("logs", exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = os.path.join("logs", f"main_{run_date}_{ts}.log")
+
+    log_file = open(log_path, "w", buffering=1, encoding="utf-8")
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+
+    sys.stdout = TeeStream(original_stdout, log_file)
+    sys.stderr = TeeStream(original_stderr, log_file)
+
+    def _close_log():
+        try:
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
+            log_file.close()
+        except Exception:
+            pass
+
+    atexit.register(_close_log)
+    print(f"Logging stdout/stderr to: {log_path}")
+    return log_path
 
 def parse_cli_args():
     parser = argparse.ArgumentParser(description="Quadratic Rough Heston FX calibration")
@@ -130,6 +167,8 @@ cp_flags_grid = setup_dict["cp_flags_grid"]
 
 # ------------- Main program starts here --------------
 if __name__ == "__main__":
+    log_file_path = init_run_logging(date)
+
     fx_var_swap = var_swap_robust(fx_df, TAU)
     fx_expiries_arr = fx_var_swap["expiries"]
     w_in = fx_var_swap["vs_mid"] * fx_expiries_arr
@@ -170,8 +209,8 @@ if __name__ == "__main__":
     xi_curve_over_tau_days = np.array([xi_smooth(i/365) for i in range (0, max_exp + 1)])
     days = np.arange(1, max_exp + 1, 1)
 
-    mc_path_X = brownianPaths(PATHS, STEPS)
-    mc_path_Variance = brownianPaths(PATHS, STEPS)
+    mc_path_X = brownian_paths(PATHS, STEPS)
+    mc_path_Variance = brownian_paths(PATHS, STEPS)
 
     AL_RANGE = (0.5001, 0.6150)
     LAM_RANGE = (0.1, 15.0) 
@@ -263,7 +302,7 @@ if __name__ == "__main__":
     print(f"a: {initial_arr[4]:.6f}")
     print(f"b: {initial_arr[5]:.6f}")
 
-    print("\nOptimized Parameters for xi curve (initial guess):")
+    print("\nOptimised Parameters for xi curve (initial guess):")
     print(f"xi(0): {xi_smooth(0.0):.6e}")
     print(f"c: {c_ig:.6e}")
     print(f"nu: {nu_ig:.6f}")
@@ -278,7 +317,7 @@ if __name__ == "__main__":
     y_bar_ig = (np.sqrt(xi_smooth(0.0) - c_ig) / a_ig) + b_ig
     e_c, fit_curve = solve_for_xi(al_ig, lam_ig, nu_ig, y_bar_ig, c_ig, a_ig, b_ig, TAU_DAYS)
     print(f"RMSE between fitted xi curve and smoothed xi curve: {np.sqrt(np.mean((fit_curve - xi_curve_over_tau_days) ** 2)):.6e}")
-    print(f"Percentage difference between fitted xi curve and smoothed xi curve: {100*np.mean(np.abs((fit_curve - xi_curve_over_tau_days) / xi_curve_over_tau_days)):.6f}%")
+    print(f"Percentage difference between fitted xi curve and smoothed xi curve: {100*np.mean(np.abs((fit_curve - xi_curve_over_tau_days) / xi_curve_over_tau_days)):.6f}%\n")
 
     fig = plt.figure(figsize=(8,8))
     title = "Forward variance curve, {} ({} to {})".format(date, TAU_STR[0], TAU_STR[-1])
@@ -434,7 +473,8 @@ if __name__ == "__main__":
     simulation_time = []
     valid_point_runtime = []
     total_time = time.perf_counter()
-
+    """
+    print("\n------------------------------------------------------------------------------")
     for theta in random_params:
         pump_ui()
         count += 1
@@ -607,7 +647,7 @@ if __name__ == "__main__":
     plt.savefig(f'{ig_path}sobol_search_{len(valid_points)}_{N}.png', dpi=600, format='png')
     plt.savefig(f'{ig_path}sobol_search_{len(valid_points)}_{N}.eps', format='eps')
     add_plot_window_figure(fig)
-
+"""
     # Global optimisation: Warm started IPOP-CMA-ES
     converge_constraint = lambda x: (x[1] / gamma(x[3])) ** 2 * gamma(2 * (x[3] - 0.5)) / (2 * x[2]) ** (2 * (x[3] - 0.5))
     nlc = NonlinearConstraint(converge_constraint, 0, 0.9999999)
@@ -703,7 +743,7 @@ if __name__ == "__main__":
         
         return np.sqrt(np.mean((PRICE_FROM_VOL_QUOTES - output_prices) ** 2))
 
-    # Worker-safe objective: local import avoids NameError under spawn multiprocessing
+    # Worker-safe objective: local import avoids errors under spawn multiprocessing
     def worker_vega_price_obj(params):
         from tools.qrh_converge_test import converge_test_val
         from tools.qrh_params import const_param_arr_to_dict
@@ -713,7 +753,7 @@ if __name__ == "__main__":
         import numpy as np
         import warnings
 
-        # Ensure regularization scales are always available in workers and out-of-order execution.
+        # Ensure regularisation scales are always available in workers and out-of-order execution.
         c, nu, lam, al, a, b = params
         param_dict = const_param_arr_to_dict([c, nu, lam, al, a, b])
 
@@ -762,14 +802,14 @@ if __name__ == "__main__":
         'CMA_active': True, # pushes the strategy away from bad regions
     }
 
-    x0 = best_theta
+    """x0 = best_theta
     x1 = initial_guess_params
     x2 = valid_points[1][0]
     num_choose = 9
 
-    ipop_x0 = np.array([vp[0] for vp in valid_points[:num_choose]] + [x1])
+    ipop_x0 = np.array([vp[0] for vp in valid_points[:num_choose]] + [x1])"""
 
-    # check at least 7 points are linearly independent for the optimization to work
+    # check at least 7 points are linearly independent for the optimisation to work
     rank = np.linalg.matrix_rank(ipop_x0 - np.mean(ipop_x0, axis=0), tol=1e-5)
     print("\n------------------------------------------------------------------------------\n")
     print(f"Rank of initial points: {rank} out of {ipop_x0.shape[0]}")  
@@ -783,10 +823,6 @@ if __name__ == "__main__":
     ipop_loss = np.array([valid_points[i][1][0] + 1e-5 * np.sum(np.square(ipop_x0[i] / range_widths)) for i in range(num_choose)] + [worker_vega_price_obj(x1)])
 
     mp.set_start_method('spawn', force=True)
-
-    # Fix 1: Exception class that can be pickled correctly
-    class AboveMaximumException(Exception):
-        pass
 
     # keep track of the shared memory blocks in the workers
     worker_shm_X = None
@@ -828,198 +864,48 @@ if __name__ == "__main__":
         market_vega_grid = market_vega_grid_
         range_widths = range_widths_
 
-    def run_ws_ipop_cma_multiprocessed(
-        obj,
-        options=None,
-        max_restarts=2, 
-        incpop_factor=2, 
-        prior_X=None,        # Historical parameters evaluated on a source task
-        prior_loss=None,     # Historical losses corresponding to prior_X
-        gamma=1,           # WS parameter - fraction of top solutions to keep
-        alpha=0.25,           # WS parameter - regularization/uncertainty
-        fallback_x0=ipop_x0,
-        fallback_sigma0=0.25
-    ):
-        if options is None:
-            options = {
-                'bounds': bounds,
-                'CMA_stds': range_widths,
-                'popsize': 16,
-                'maxfevals': 10000,
-                'tolfun': 1e-8,
-                'verbose': -9,
-                'verb_disp': 0,
-                'seed': 79
-            }
+    global_optimiser = GlobalOptimiser(
+        obj=worker_vega_price_obj,
+        converge_constraint=converge_constraint,
+        worker_init=_worker_init,
+        ui_callback=pump_ui,
+        num_cores=NUM_CORES
+    )
 
-        # 1. WARM START CALCULATION (WS-IPOP-CMA-ES)
-        use_warm_start = prior_X is not None and prior_loss is not None
-        
-        if use_warm_start:
-            print("\n--- Initializing WS-IPOP-CMA-ES with Prior Knowledge ---")
-            sigma0 = 0.75
-            x0_list, Sigma_star = warm_start(prior_X, prior_loss, gamma, alpha, bounds)
-        else:
-            print("\n--- No prior data provided. Using fallback initial guesses. ---")
-            x0_list = fallback_x0
-            sigma0 = fallback_sigma0
-
-        num_cores = mp.cpu_count() // 2 + 3
-        print(f"Starting parallel IPOP-CMA-ES optimization across {num_cores} cores using Shared Memory...")
-
-        global_best_params = None
-        global_best_loss = np.inf
-        es_strategies = []
-        times_per_generation = []
-
-        # ALLOCATE SHARED MEMORY
-        shm_X = shared_memory.SharedMemory(create=True, size=mc_path_X.nbytes)
-        shm_Var = shared_memory.SharedMemory(create=True, size=mc_path_Variance.nbytes)
-
-        lower_bounds_arr = np.array(options['bounds'][0])
-        upper_bounds_arr = np.array(options['bounds'][1])
-
-        try:
-            shared_X = np.ndarray(mc_path_X.shape, dtype=mc_path_X.dtype, buffer=shm_X.buf)
-            shared_Var = np.ndarray(mc_path_Variance.shape, dtype=mc_path_Variance.dtype, buffer=shm_Var.buf)
-            np.copyto(shared_X, mc_path_X)
-            np.copyto(shared_Var, mc_path_Variance)
-
-            init_args = (
-                shm_X.name, shared_X.shape, shared_X.dtype,
-                shm_Var.name, shared_Var.shape, shared_Var.dtype,
-                xi_smooth, fx_expiries_arr, COMBINED_OIS_DICT,
-                spot, log_fwd_moneyness_grid, fx_expiries_arr, base_rates_arr, term_rates_arr, cp_flags_grid, FWD,
-                PRICE_FROM_VOL_QUOTES, market_vega_grid, range_widths
-            )
-
-            base_popsize = options['popsize']
-
-            with mp.Pool(processes=num_cores, initializer=_worker_init, initargs=init_args) as pool:
-                for guess_idx, current_x0 in enumerate(x0_list):
-                    print(f"\n=======================================================")
-                    if use_warm_start:
-                        print(f"   Evaluating Warm-Started Mean (m_star)")
-                    else:
-                        print(f"   Evaluating Initial Guess {guess_idx + 1}/{len(x0_list)}")
-                    print(f"   Starting params: {current_x0}")
-                    print(f"   Initial Loss: {obj(current_x0):.8e}")
-                    print(f"=======================================================")
-                    
-                    # Reset popsize for each new guess sequence
-                    current_popsize = base_popsize
-                    t_per_gen = []
-                    
-                    for run in range(max_restarts + 1):
-                        print(f"\n--- Starting IPOP Run {run + 1}/{max_restarts + 1} ---")
-                        print(f"Population Size: {current_popsize}")
-                        
-                        run_options = options.copy()
-                        run_options['popsize'] = current_popsize
-
-                        es = cma.CMAEvolutionStrategy(current_x0, sigma0, inopts=run_options)
-                        
-                        # WARM START OVERRIDE: Manually inject the custom covariance matrix 
-                        if use_warm_start and run == 0:
-                            # calculate scaling matrix based on range_widths and your sigma0
-                            # outer product scales the full covariance matrix (including cross-correlations)
-                            scale_matrix = (sigma0**2) * np.outer(range_widths, range_widths)
-                            
-                            # 2. Convert raw Sigma_star into PyCMA's internal scaled space
-                            es.C = Sigma_star / scale_matrix
-                            
-                            # 3. Perform standard eigen-decomposition on the normalized matrix
-                            D2, B = np.linalg.eigh(es.C)
-                            es.D = np.sqrt(np.maximum(D2, 1e-18)) 
-                            es.B = B
-                            es.invsqrtC = np.dot(es.B, np.diag(1.0 / es.D)).dot(es.B.T)
-                            
-                            print("  -> Injecting Normalized Warm-Start Covariance Matrix...")
-                            print(f"  [Debug] True Initial Step Sizes: {es.sigma * np.sqrt(np.diag(es.C)) * range_widths}")
-
-                        es.logger = cma.CMADataLogger(f'outcmaes/{TAU_STR[0]}-to-{TAU_STR[-1]}/guess{guess_idx}_run{run}/').register(es)
-
-                        res = None
-                        try:
-                            wall_clock_start = time.perf_counter()
-                            while not es.stop():
-                                tick = time.perf_counter()
-                                raw_solutions = es.ask()
-                                clipped_solutions = [np.clip(sol, lower_bounds_arr, upper_bounds_arr) for sol in raw_solutions]
-                                fitnesses = []
-                                for fit in tqdm(
-                                    pool.imap(obj, clipped_solutions),
-                                    total=len(clipped_solutions),
-                                    desc=f"Gen {es.result.iterations} | Best Loss: {es.result.fbest:.8e}",
-                                    leave=False,
-                                ):
-                                    fitnesses.append(fit)
-                                    pump_ui()
-                                es.tell(
-                                    raw_solutions,
-                                    fitnesses,
-                                    constraints_values=[[converge_constraint(np.array(sol))] for sol in clipped_solutions]
-                                )
-                                es.logger.add()
-                                es.disp()
-                                pump_ui(force=True)
-                                tock = time.perf_counter()
-                                t_per_gen.append(tock - tick)
-
-                            res = es.result
-
-                        except Exception as e:
-                            print(f"Error during optimization run {run + 1}: {e}")
-                            traceback.print_exc()
-                            try:
-                                res = es.result
-                            except Exception:
-                                res = None
-
-                        es_strategies.append(es)
-
-                        if res is None or res.xbest is None:
-                            print(f"Run {run + 1} produced no valid result — skipping.")
-                            current_popsize *= incpop_factor
-                            continue
-                        
-                        time_gen = {"popsize": current_popsize, "mean_time_per_gen": np.mean(t_per_gen), 
-                                    "wall_clock": time.perf_counter() - wall_clock_start, "loss": res.fbest, 
-                                    "params": res.xbest, 'generations': res.iterations}
-                        times_per_generation.append(time_gen)
-                        print(f"Run {run + 1} Stopped: {es.stop()} | Iterations: {res.iterations}")
-                        print(f"Run {run + 1} Best Loss: {res.fbest:.8e}")
-                        print(f"Run {run + 1} Best Params: {res.xbest}")
-                        print(f"Run {run + 1} Time per Gen: {time_gen['mean_time_per_gen']:.8f}s | Total Wall Clock: {time_gen['wall_clock']:.8f}s")
-
-                        if res.fbest < global_best_loss:
-                            print(f"  -> New Global Best Found! Updating global best loss and parameters.")
-                            print(f"  -> New Best Parameters: {res.xbest} | New Best Loss: {res.fbest:.8e}")
-                            global_best_loss = res.fbest
-                            global_best_params = res.xbest
-
-                        current_popsize *= incpop_factor
-                        
-                        # If restarting, start from the best point found in the previous run
-                        current_x0 = global_best_params if global_best_params is not None else current_x0
-
-        except KeyboardInterrupt:
-            print("\nOptimization interrupted by user. Initiating safe shutdown...")
-        finally:
-            try:
-                shm_X.close()
-                shm_X.unlink()
-            except FileNotFoundError: pass
-            
-            try:
-                shm_Var.close()
-                shm_Var.unlink()
-            except FileNotFoundError: pass
-
-        return {"params": global_best_params, "loss": global_best_loss, "es": es_strategies, "times_per_generation": times_per_generation}
+    worker_init_args_tail = (
+        xi_smooth,
+        fx_expiries_arr,
+        COMBINED_OIS_DICT,
+        spot,
+        log_fwd_moneyness_grid,
+        fx_expiries_arr,
+        base_rates_arr,
+        term_rates_arr,
+        cp_flags_grid,
+        FWD,
+        PRICE_FROM_VOL_QUOTES,
+        market_vega_grid,
+        range_widths,
+    )
 
     # https://github.com/CMA-ES/pycma
-    run_res = run_ws_ipop_cma_multiprocessed(obj=worker_vega_price_obj, options=cma_options, prior_X=ipop_x0, prior_loss=ipop_loss)
+    run_res = global_optimiser.run_ws_ipop_cma_multiprocessed(
+        options=cma_options,
+        bounds=bounds,
+        range_widths=range_widths,
+        mc_path_X=mc_path_X,
+        mc_path_Variance=mc_path_Variance,
+        worker_init_args_tail=worker_init_args_tail,
+        #prior_X=ipop_x0,
+        #prior_loss=ipop_loss,
+        max_restarts=2,
+        incpop_factor=2,
+        gamma=1,
+        alpha=0.25,
+        fallback_x0=ipop_x0,
+        fallback_sigma0=0.25,
+        logger_path_fn=lambda guess_idx, run: f"outcmaes/{TAU_STR[0]}-to-{TAU_STR[-1]}/guess{guess_idx}_run{run}/",
+    )
 
     count = 0
     plt.rcParams.update({'font.size': 11})
@@ -1038,18 +924,18 @@ if __name__ == "__main__":
         fig.savefig(eps_path, format='eps')
         add_plot_window_figure(fig, title=f"CMA Run {i}")
 
-    # Local optimization: Nelder-Mead
+    # Local optimisation: Nelder-Mead
     opt_method = "Nelder-Mead"
 
-    final_opt_sim = Simulator(worker_vega_price_obj)
+    final_opt_sim = OptimiserSimulator(worker_vega_price_obj)
     print("\n------------------------------------------------------------------------------\n")
-    print(f"Starting final {opt_method} optimization with vega price objective...")
+    print(f"Starting final {opt_method} optimisation with vega price objective...")
 
     def final_opt_callback(xk):
         pump_ui(force=True)
         return final_opt_sim.callback(xk)
 
-    total_optimization_time = time.perf_counter()
+    total_optimisation_time = time.perf_counter()
     final_opt = minimize(
         method=opt_method,
         fun=final_opt_sim.simulate,
@@ -1060,11 +946,11 @@ if __name__ == "__main__":
         tol=1e-8,
         options={"maxiter": 1500, "disp": True}, #"seed": 79,"adaptive": True,"workers": 8,"eps": 1e-6}
     )
-    total_optimization_time = time.perf_counter() - total_optimization_time
-    print(f"Final optimization completed in {total_optimization_time:.2f} seconds.")
+    total_optimisation_time = time.perf_counter() - total_optimisation_time
+    print(f"Final optimisation completed in {total_optimisation_time:.2f} seconds.")
     print(f"Average sim time per iteration: {np.sum(final_opt_sim.sim_times) / final_opt.nit}s over {final_opt.nit} iterations")
 
-    # Display final optimization results
+    # Display final optimisation results
     print("\n------------------------------------------------------------------------------\n")
 
     # Initial guess loss evaluation
@@ -1170,8 +1056,8 @@ if __name__ == "__main__":
 
     qrh_params = {"al": al_qrh, "lam": lam_qrh, "nu": nu_qrh, "c": c_qrh, "a": a_qrh , "b": b_qrh }
 
-    optimized_qrh = QuadraticRoughHeston(**qrh_params, xi0=xi_smooth)
-    res_optimized = optimized_qrh.simulate_filtered(
+    optimised_qrh = QuadraticRoughHeston(**qrh_params, xi0=xi_smooth)
+    res_optimised = optimised_qrh.simulate_filtered(
         mc_path_X,
         mc_path_Variance,
         fx_var_swap["expiries"],
@@ -1180,8 +1066,8 @@ if __name__ == "__main__":
         ui_update_every=ui_update_every,
     )
 
-    mc_path_matrix_new = np.array([res_optimized[expiry]["X"] for expiry in fx_expiries_arr])
-    mc_var_matrix_new = np.array([res_optimized[expiry]["V"] for expiry in fx_expiries_arr])
+    mc_path_matrix_new = np.array([res_optimised[expiry]["X"] for expiry in fx_expiries_arr])
+    mc_var_matrix_new = np.array([res_optimised[expiry]["V"] for expiry in fx_expiries_arr])
 
     optimised_model_price_grid = get_mc_prices_grid_log_fwd(
         mc_path_matrix_new, spot, log_fwd_moneyness_grid, fx_expiries_arr, base_rates_arr, term_rates_arr, cp_flags_grid, FWD
@@ -1193,9 +1079,9 @@ if __name__ == "__main__":
         mc_path_matrix_new, spot, log_fwd_moneyness_grid, fx_expiries_arr, base_rates_arr, term_rates_arr, cp_flags_grid
     )
 
-    np.savetxt(f"{data_expiries_path}optimized_model_price_grid.csv", optimised_model_price_grid, delimiter=",")
-    np.savetxt(f"{data_expiries_path}optimized_iv_grid_jaeckel.csv", optimised_iv_grid_jaeckel, delimiter=",")
-    np.savetxt(f"{data_expiries_path}optimized_iv_grid_gatheral.csv", optimised_iv_grid_gatheral, delimiter=",")
+    np.savetxt(f"{data_expiries_path}optimised_model_price_grid.csv", optimised_model_price_grid, delimiter=",")
+    np.savetxt(f"{data_expiries_path}optimised_iv_grid_jaeckel.csv", optimised_iv_grid_jaeckel, delimiter=",")
+    np.savetxt(f"{data_expiries_path}optimised_iv_grid_gatheral.csv", optimised_iv_grid_gatheral, delimiter=",")
 
     # Plot results
 
@@ -1231,7 +1117,6 @@ if __name__ == "__main__":
     ax.plot_wireframe(X, Y, VOL_QUOTES, color='red', label='Market', linewidth=2)
     ax.plot_wireframe(X, Y, optimised_iv_grid_jaeckel, color='green', linestyle='--', label="Model [Jaeckel]", linewidth=2)
     ax.set_title("EURUSD implied volatility")
-    ax.tick_params(axis='both', pad=10)
     ax.set_xlabel('$\\Delta$')
     ax.set_ylabel('Time to Expiry $\\tau$')
     ax.set_zlabel('BS Implied Vol $\\sigma_{imp}$')
