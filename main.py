@@ -1,8 +1,18 @@
+import os
+
+os.environ["MPLCONFIGDIR"] = os.path.join(os.getcwd(), ".mplconfig")
+os.environ["XDG_CACHE_HOME"] = os.path.join(os.getcwd(), ".cache")
+os.environ["NUMBA_DISABLE_JIT"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
+
 import matplotlib
 matplotlib.use("Qt5Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import sys
 import time
 import warnings
@@ -12,7 +22,6 @@ import multiprocess as mp
 
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from scipy.stats import qmc
 from tools.Asset import brownian_paths
 from tools.grid import *
 from tools.qrh_converge_test import *
@@ -41,15 +50,8 @@ Individual Project for Year 3 BSc Computer Science, University College London, 2
 Anthony Nkyi, April 2026.
 """
 
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
-
 warnings.filterwarnings("ignore")
 np.seterr(all='ignore')
-
 
 class TeeStream:
     def __init__(self, *streams):
@@ -458,6 +460,8 @@ if __name__ == "__main__":
 
     m = 10
     N = 2**m 
+
+    from scipy.stats import qmc
 
     sampler = qmc.Sobol(d=6, scramble=True, seed=79)
     sample_unit = sampler.random_base2(m=m)
